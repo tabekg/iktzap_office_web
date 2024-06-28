@@ -1,4 +1,4 @@
-import * as React from "react";
+import { useCallback, useContext, useMemo, useState } from "react";
 import Avatar from "@mui/material/Avatar";
 import Button from "@mui/material/Button";
 import CssBaseline from "@mui/material/CssBaseline";
@@ -8,16 +8,47 @@ import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import Typography from "@mui/material/Typography";
 import Container from "@mui/material/Container";
 import Copyright from "../ui/Copyright";
+import requester from "../utils/requester";
+import { handleError } from "../utils/error";
+import { IUser } from "../models/user";
+import { TUserContext, UserContext } from "../utils/context";
 
 export default function AuthContainer() {
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    console.log({
-      email: data.get("email"),
-      password: data.get("password"),
-    });
-  };
+  const [phoneNumber, setPhoneNumber] = useState("+7");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const userContext = useContext(UserContext) as TUserContext;
+
+  const submitable = useMemo(() => {
+    return phoneNumber.length > 0 && password.length > 0 && !loading;
+  }, [phoneNumber, password, loading]);
+
+  const submit = useCallback(() => {
+    if (loading) {
+      return;
+    }
+    setLoading(true);
+    requester
+      .post<{ token: string; user: IUser }>("/auth", {
+        phone_number: phoneNumber,
+        password,
+      })
+      .then((res) => {
+        localStorage.setItem("token", res.payload.token);
+        userContext.setUser(res.payload.user);
+      })
+      .catch((e) => {
+        console.log(e);
+        handleError(e, {
+          wrong_password: "Неверный пароль!",
+          not_found: "Пользователь с таким номером не существует!",
+        });
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [loading, phoneNumber, password]);
 
   return (
     <Container component="main" maxWidth="xs">
@@ -36,33 +67,37 @@ export default function AuthContainer() {
         <Typography component="h1" variant="h5">
           Войдите в систему
         </Typography>
-        <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
+        <Box sx={{ mt: 1 }}>
           <TextField
             margin="normal"
-            required
             fullWidth
-            id="login"
-            label="Логин"
-            name="login"
+            label="Телефон номер"
             autoFocus
+            placeholder="+7"
+            type="tel"
+            value={phoneNumber}
+            disabled={loading}
+            onChange={(e) => setPhoneNumber(e.target.value)}
           />
           <TextField
             margin="normal"
-            required
             fullWidth
-            name="password"
             label="Пароль"
             type="password"
-            id="password"
             autoComplete="current-password"
+            value={password}
+            disabled={loading}
+            onChange={(e) => setPassword(e.target.value)}
           />
           <Button
             type="submit"
             fullWidth
             variant="contained"
+            disabled={!submitable}
             sx={{ mt: 3, mb: 2 }}
+            onClick={() => submit()}
           >
-            Войти
+            {loading ? "Подождите..." : "Войти"}
           </Button>
         </Box>
       </Box>
